@@ -6,10 +6,10 @@ import java.util.List;
 public class Predator extends Agent {
     private static final int STEP_COST = 1;
     private static final int MEAT_GAIN = 26;
-    private static final int REPRODUCE_THRESHOLD = 65; // порог разможения
-    private static final int CHILD_ENERGY = 30;
+    private static final int REPRODUCE_THRESHOLD = 78; // порог разможения
+    private static final int CHILD_ENERGY = 35;
     private static final int MAX_ENERGY = 90;
-    private static final double CATCH_PROBABILITY = 0.37; // шанс успешного захвата
+    private static final double CATCH_PROBABILITY = 0.30; // шанс успешного захвата
 
     private int digestionCooldown = 0;
 
@@ -107,10 +107,18 @@ public class Predator extends Agent {
 
     private int countNearby(Environment env, Class<? extends Agent> type, int radius) {
         int count = 0;
-        for (int[] pos : env.getNeighbors(x, y, radius)) {
-            Agent a = env.getAgent(pos[0], pos[1]);
-            if (a != null && type.isInstance(a) && a.isAlive()) {
-                count++;
+        int minX = Math.max(0, x - radius);
+        int maxX = Math.min(env.getWidth() - 1, x + radius);
+        int minY = Math.max(0, y - radius);
+        int maxY = Math.min(env.getHeight() - 1, y + radius);
+
+        for (int ny = minY; ny <= maxY; ny++) {
+            for (int nx = minX; nx <= maxX; nx++) {
+                if (nx == x && ny == y) continue;
+                Agent a = env.getAgent(nx, ny);
+                if (a != null && type.isInstance(a) && a.isAlive()) {
+                    count++;
+                }
             }
         }
         return count;

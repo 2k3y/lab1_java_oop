@@ -16,7 +16,7 @@ public class Main {
         String choice = scanner.nextLine().trim();
 
         Environment env = new Environment(60, 60);
-        env.populate(450, 150, 12);
+        env.populate(700, 90, 8);
 
         switch (choice) {
             case "1":
@@ -49,29 +49,50 @@ public class Main {
     // Режим бесконечного прогона
     private static void runInfiniteMarathon(Environment env) {
         System.out.println("\n>>> Запущен БЕСКОНЕЧНЫЙ МАРАФОН.");
+        System.out.println(">>> Чтобы корректно остановить симуляцию, нажмите [ENTER] в консоли...\n");
+
+        java.util.concurrent.atomic.AtomicBoolean isRunning = new java.util.concurrent.atomic.AtomicBoolean(true);
+
+        // Фоновый поток ожидает нажатия ENTER
+        Thread stopListener = new Thread(() -> {
+            try {
+                System.in.read();
+                isRunning.set(false);
+            } catch (Exception ignored) {}
+        });
+        stopListener.setDaemon(true);
+        stopListener.start();
 
         long startTime = System.currentTimeMillis();
         long step = 1;
 
-        while (true) {
+        while (isRunning.get()) {
             env.update();
 
-            // Вывод промежуточных данных каждые 500 ходов, чтобы не тратить время на консольный вывод
+            // Промежуточная статистика каждые 500 ходов
             if (step % 500 == 0) {
                 long elapsedSeconds = (System.currentTimeMillis() - startTime) / 1000;
                 System.out.printf("Шаг %7d | Время: %4d с | ", step, elapsedSeconds);
                 env.printPopulationStats();
             }
 
-            // Остановка только при реальном экологическом коллапсе
-            if (env.checkExtinction()) {
+            // Проверка экологического коллапса
+            if (step % 50 == 0 && env.checkExtinction()) {
                 long totalTime = System.currentTimeMillis() - startTime;
                 System.out.printf("%nЭкосистема пала на шаге %d после %d мс работы.%n", step, totalTime);
-                break;
+                return;
             }
 
             step++;
         }
+
+        long totalTime = (System.currentTimeMillis() - startTime) / 1000;
+        System.out.println("\n=========================================");
+        System.out.println(" ОСТАНОВКА ПОЛЬЗОВАТЕЛЕМ:");
+        System.out.printf("Симуляция успешно остановлена на шаге %d (%d сек)%n", step, totalTime);
+        System.out.print("Финальный баланс: ");
+        env.printPopulationStats();
+        System.out.println("=========================================");
     }
 
     private static void runFixedStressTest(Environment env, int totalSteps) {
@@ -107,7 +128,7 @@ public class Main {
             System.out.println("\n--- Шаг: " + step + " ---");
             env.display();
 
-            if (env.checkExtinction()) {
+            if (step % 50 == 0 && env.checkExtinction()) {
                 System.out.println("Симуляция остановлена на шаге " + step + ".");
                 break;
             }

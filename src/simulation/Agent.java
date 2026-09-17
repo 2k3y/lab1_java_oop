@@ -40,13 +40,21 @@ public abstract class Agent {
         Agent closest = null;
         int minDistance = Integer.MAX_VALUE;
 
-        for (int[] pos : env.getNeighbors(x, y, 2)) {
-            Agent neighbor = env.getAgent(pos[0], pos[1]);
-            if (neighbor != null && targetType.isInstance(neighbor) && neighbor.isAlive()) {
-                int dist = Math.abs(pos[0] - x) + Math.abs(pos[1] - y);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closest = neighbor;
+        int minX = Math.max(0, x - 2);
+        int maxX = Math.min(env.getWidth() - 1, x + 2);
+        int minY = Math.max(0, y - 2);
+        int maxY = Math.min(env.getHeight() - 1, y + 2);
+
+        for (int ny = minY; ny <= maxY; ny++) {
+            for (int nx = minX; nx <= maxX; nx++) {
+                if (nx == x && ny == y) continue;
+                Agent neighbor = env.getAgent(nx, ny);
+                if (neighbor != null && targetType.isInstance(neighbor) && neighbor.isAlive()) {
+                    int dist = Math.abs(nx - x) + Math.abs(ny - y);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closest = neighbor;
+                    }
                 }
             }
         }

@@ -1,10 +1,10 @@
 package simulation;
 
 public class Plant extends Agent {
-    private static final int ENERGY_GAIN = 1;
-    private static final int REPRODUCE_THRESHOLD = 11;
-    private static final int CHILD_ENERGY = 4;
-    private static final int MAX_ENERGY = 16;
+    private static final int ENERGY_GAIN = 4;          // Растение растет очень быстро (+4 энергии за такт)
+    private static final int REPRODUCE_THRESHOLD = 6;  // Низкий порог: делится почти сразу
+    private static final int CHILD_ENERGY = 2;         // Минимальные затраты на потомка
+    private static final int MAX_ENERGY = 10;
 
     public Plant(int x, int y) {
         this(x, y, 4);
@@ -24,9 +24,8 @@ public class Plant extends Agent {
         energy += ENERGY_GAIN;
 
         if (energy >= REPRODUCE_THRESHOLD) {
-            // Ограничение скученности: если рядом уже 4+ растений, побег не дается
-            if (countNeighborPlants(env) < 4) {
-                int[] freeCell = env.findEmptyNeighbor(x, y);
+            if (countNeighborPlants(env) < 5) { // Разрешаем чуть большую плотность для густых зарослей
+                int[] freeCell = env.findEmptyNeighbor(x, y); // Растет строго рядом с родителем
                 if (freeCell != null) {
                     this.energy -= CHILD_ENERGY;
                     env.addAgent(new Plant(freeCell[0], freeCell[1], CHILD_ENERGY));
@@ -45,10 +44,18 @@ public class Plant extends Agent {
 
     private int countNeighborPlants(Environment env) {
         int count = 0;
-        for (int[] pos : env.getNeighbors(x, y, 1)) {
-            Agent a = env.getAgent(pos[0], pos[1]);
-            if (a instanceof Plant && a.isAlive()) {
-                count++;
+        int minX = Math.max(0, x - 1);
+        int maxX = Math.min(env.getWidth() - 1, x + 1);
+        int minY = Math.max(0, y - 1);
+        int maxY = Math.min(env.getHeight() - 1, y + 1);
+
+        for (int ny = minY; ny <= maxY; ny++) {
+            for (int nx = minX; nx <= maxX; nx++) {
+                if (nx == x && ny == y) continue;
+                Agent a = env.getAgent(nx, ny);
+                if (a instanceof Plant && a.isAlive()) {
+                    count++;
+                }
             }
         }
         return count;

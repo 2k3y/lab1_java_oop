@@ -100,7 +100,7 @@ public class Environment {
 
     public void update() {
         List<Agent> currentAgents = new ArrayList<>(agents);
-        // Случайный порядок ходов исключает позиционный детерминизм
+        // Случайный порядок ходов исключает позиционный детерминизм[cite: 2, 8, 16]
         Collections.shuffle(currentAgents, random);
 
         for (Agent a : currentAgents) {
@@ -110,14 +110,6 @@ public class Environment {
         }
         agents.removeIf(a -> !a.isAlive());
 
-        // Почвенный банк
-        for (int i = 0; i < 5; i++) {
-            int rx = random.nextInt(width);
-            int ry = random.nextInt(height);
-            if (isCellEmpty(rx, ry)) {
-                addAgent(new Plant(rx, ry, 4));
-            }
-        }
     }
 
     // Для растений: строго пустая соседняя клетка
