@@ -5,13 +5,13 @@ import java.util.List;
 
 public class Herbivore extends Agent {
     private static final int STEP_COST = 1;
-    private static final int FOOD_GAIN = 20;
-    private static final int REPRODUCE_THRESHOLD = 34;
-    private static final int CHILD_ENERGY = 17;
+    private static final int FOOD_GAIN = 8;
+    private static final int REPRODUCE_THRESHOLD = 48;
+    private static final int CHILD_ENERGY = 26;
     private static final int MAX_ENERGY = 55;
 
     public Herbivore(int x, int y) {
-        this(x, y, 25);
+        this(x, y, 22);
     }
 
     public Herbivore(int x, int y, int energy) {
@@ -32,6 +32,7 @@ public class Herbivore extends Agent {
         }
 
         Agent threat = scanVision(env, Predator.class);
+
         if (threat != null) {
             fleeFrom(env, threat);
         } else {
@@ -47,9 +48,9 @@ public class Herbivore extends Agent {
             energy = MAX_ENERGY;
         }
 
-        // Размножение при отсутствии скученности
-        if (energy >= REPRODUCE_THRESHOLD && countNearby(env, Herbivore.class, 2) < 4) {
-            int[] freeCell = env.findSpawnCellForAnimal(x, y);
+        // РАЗМНОЖЕНИЕ: только наличие энергии и свободной соседней клетки
+        if (energy >= REPRODUCE_THRESHOLD) {
+            int[] freeCell = env.findEmptyNeighbor(x, y);
             if (freeCell != null) {
                 this.energy -= CHILD_ENERGY;
                 env.addAgent(new Herbivore(freeCell[0], freeCell[1], CHILD_ENERGY));
@@ -57,49 +58,72 @@ public class Herbivore extends Agent {
         }
     }
 
-    private void moveTowards(Environment env, int targetX, int targetY) {
-        int dx = Integer.compare(targetX, x);
-        int dy = Integer.compare(targetY, y);
-        int nx = x + dx;
-        int ny = y + dy;
-
-        Agent target = env.getAgent(nx, ny);
-        if (target instanceof Plant) {
-            this.energy = Math.min(MAX_ENERGY, this.energy + FOOD_GAIN);
-            env.removeAgent(target);
-            moveTo(env, nx, ny);
-        } else if (env.isCellEmpty(nx, ny)) {
-            moveTo(env, nx, ny);
-        } else {
-            moveRandomly(env);
-        }
-    }
-
-    // Скольжение вдоль стен: максимизация расстояния до угрозы среди доступных клеток
     private void fleeFrom(Environment env, Agent threat) {
-        int bestX = -1, bestY = -1;
         int maxDistSq = -1;
+        List<int[]> bestPositions = new ArrayList<>();
 
-        for (int[] pos : env.getNeighbors(x, y, 1)) {
+        for (int[] pos : env.getOrthogonalNeighbors(x, y)) {
             Agent occ = env.getAgent(pos[0], pos[1]);
             if (occ == null || occ instanceof Plant) {
                 int distSq = (pos[0] - threat.getX()) * (pos[0] - threat.getX())
                         + (pos[1] - threat.getY()) * (pos[1] - threat.getY());
+
                 if (distSq > maxDistSq) {
                     maxDistSq = distSq;
-                    bestX = pos[0];
-                    bestY = pos[1];
+                    bestPositions.clear();
+                    bestPositions.add(pos);
+                } else if (distSq == maxDistSq) {
+                    bestPositions.add(pos);
                 }
             }
         }
 
-        if (bestX != -1) {
-            Agent target = env.getAgent(bestX, bestY);
+        if (!bestPositions.isEmpty()) {
+            int[] chosen = bestPositions.get(random.nextInt(bestPositions.size()));
+            Agent target = env.getAgent(chosen[0], chosen[1]);
             if (target instanceof Plant) {
-                this.energy = Math.min(MAX_ENERGY, this.energy + FOOD_GAIN);
-                env.removeAgent(target);
+                eatPlant(env, target, chosen[0], chosen[1]);
+            } else {
+                moveTo(env, chosen[0], chosen[1]);
             }
-            moveTo(env, bestX, bestY);
+        }
+    }
+
+    private void moveTowards(Environment env, int targetX, int targetY) {
+        int dx = targetX - x;
+        int dy = targetY - y;
+
+        if (Math.abs(dx) + Math.abs(dy) == 1) {
+            Agent target = env.getAgent(targetX, targetY);
+            if (target instanceof Plant) {
+                eatPlant(env, target, targetX, targetY);
+                return;
+            }
+        }
+
+        int stepX = Integer.compare(targetX, x);
+        int stepY = Integer.compare(targetY, y);
+
+        List<int[]> options = new ArrayList<>();
+        if (stepX != 0) options.add(new int[]{x + stepX, y});
+        if (stepY != 0) options.add(new int[]{x, y + stepY});
+
+        for (int[] opt : options) {
+            Agent a = env.getAgent(opt[0], opt[1]);
+            if (a instanceof Plant) {
+                eatPlant(env, a, opt[0], opt[1]);
+                return;
+            }
+        }
+
+        List<int[]> emptyOptions = new ArrayList<>();
+        for (int[] opt : options) {
+            if (env.isCellEmpty(opt[0], opt[1])) emptyOptions.add(opt);
+        }
+
+        if (!emptyOptions.isEmpty()) {
+            int[] chosen = emptyOptions.get(random.nextInt(emptyOptions.size()));
+            moveTo(env, chosen[0], chosen[1]);
         } else {
             moveRandomly(env);
         }
@@ -107,39 +131,27 @@ public class Herbivore extends Agent {
 
     private void moveRandomly(Environment env) {
         List<int[]> validMoves = new ArrayList<>();
-        for (int[] pos : env.getNeighbors(x, y, 1)) {
+        for (int[] pos : env.getOrthogonalNeighbors(x, y)) {
             Agent a = env.getAgent(pos[0], pos[1]);
             if (a == null || a instanceof Plant) {
                 validMoves.add(pos);
             }
         }
+
         if (!validMoves.isEmpty()) {
             int[] move = validMoves.get(random.nextInt(validMoves.size()));
             Agent target = env.getAgent(move[0], move[1]);
             if (target instanceof Plant) {
-                this.energy = Math.min(MAX_ENERGY, this.energy + FOOD_GAIN);
-                env.removeAgent(target);
+                eatPlant(env, target, move[0], move[1]);
+            } else {
+                moveTo(env, move[0], move[1]);
             }
-            moveTo(env, move[0], move[1]);
         }
     }
 
-    private int countNearby(Environment env, Class<? extends Agent> type, int radius) {
-        int count = 0;
-        int minX = Math.max(0, x - radius);
-        int maxX = Math.min(env.getWidth() - 1, x + radius);
-        int minY = Math.max(0, y - radius);
-        int maxY = Math.min(env.getHeight() - 1, y + radius);
-
-        for (int ny = minY; ny <= maxY; ny++) {
-            for (int nx = minX; nx <= maxX; nx++) {
-                if (nx == x && ny == y) continue;
-                Agent a = env.getAgent(nx, ny);
-                if (a != null && type.isInstance(a) && a.isAlive()) {
-                    count++;
-                }
-            }
-        }
-        return count;
+    private void eatPlant(Environment env, Agent plant, int nx, int ny) {
+        this.energy = Math.min(MAX_ENERGY, this.energy + FOOD_GAIN);
+        env.removeAgent(plant);
+        moveTo(env, nx, ny);
     }
 }

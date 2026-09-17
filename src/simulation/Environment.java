@@ -30,13 +30,13 @@ public class Environment {
         return isInside(x, y) && grid[y][x] == null;
     }
 
-    // Метод 1: получение агента
+    // Получение агента по координатам
     public Agent getAgent(int x, int y) {
         if (!isInside(x, y)) return null;
         return grid[y][x];
     }
 
-    // Метод 2: размещение / удаление агента
+    // Размещение / удаление агента с синхронизацией внутренних координат
     public void setAgent(int x, int y, Agent agent) {
         if (isInside(x, y)) {
             grid[y][x] = agent;
@@ -47,7 +47,7 @@ public class Environment {
         }
     }
 
-    // Метод 3: получение списка соседних клеток строго внутри границ
+    // Окрестность Мура (8 сторон) с заданным радиусом строго внутри границ
     public List<int[]> getNeighbors(int x, int y, int radius) {
         List<int[]> neighbors = new ArrayList<>();
         for (int dy = -radius; dy <= radius; dy++) {
@@ -58,6 +58,20 @@ public class Environment {
                 if (isInside(nx, ny)) {
                     neighbors.add(new int[]{nx, ny});
                 }
+            }
+        }
+        return neighbors;
+    }
+
+    // Окрестность фон Неймана (4 стороны: вверх, вниз, влево, вправо)
+    public List<int[]> getOrthogonalNeighbors(int x, int y) {
+        List<int[]> neighbors = new ArrayList<>();
+        int[][] dirs = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+        for (int[] d : dirs) {
+            int nx = x + d[0];
+            int ny = y + d[1];
+            if (isInside(nx, ny)) {
+                neighbors.add(new int[]{nx, ny});
             }
         }
         return neighbors;
@@ -100,7 +114,7 @@ public class Environment {
 
     public void update() {
         List<Agent> currentAgents = new ArrayList<>(agents);
-        // Случайный порядок ходов исключает позиционный детерминизм[cite: 2, 8, 16]
+        // Случайный порядок ходов исключает позиционный детерминизм
         Collections.shuffle(currentAgents, random);
 
         for (Agent a : currentAgents) {
@@ -109,13 +123,12 @@ public class Environment {
             }
         }
         agents.removeIf(a -> !a.isAlive());
-
     }
 
-    // Для растений: строго пустая соседняя клетка
+    // Размножение: строго пустая соседняя клетка по 4 сторонам (крестом)
     public int[] findEmptyNeighbor(int x, int y) {
         List<int[]> emptyCells = new ArrayList<>();
-        for (int[] pos : getNeighbors(x, y, 1)) {
+        for (int[] pos : getOrthogonalNeighbors(x, y)) {
             if (isCellEmpty(pos[0], pos[1])) {
                 emptyCells.add(pos);
             }
@@ -126,10 +139,10 @@ public class Environment {
         return null;
     }
 
-    // Для животных: свободная клетка либо занятая травой
+    // Размножение травоядных: свободная клетка либо с травой по 4 сторонам
     public int[] findSpawnCellForAnimal(int x, int y) {
         List<int[]> cells = new ArrayList<>();
-        for (int[] pos : getNeighbors(x, y, 1)) {
+        for (int[] pos : getOrthogonalNeighbors(x, y)) {
             Agent a = getAgent(pos[0], pos[1]);
             if (a == null || a instanceof Plant) {
                 cells.add(pos);
@@ -159,7 +172,7 @@ public class Environment {
         if (p == 0 || h == 0 || pr == 0) {
             System.out.println("\n=========================================");
             System.out.println("⚠️  ЭКОЛОГИЧЕСКИЙ КОЛЛАПС: ВЫМИРАНИЕ ВИДА!");
-            if (p == 0)  System.out.println("-> Рм астения полностью исчезли.");
+            if (p == 0)  System.out.println("-> Растения полностью исчезли.");
             if (h == 0)  System.out.println("-> Травоядные полностью погибли.");
             if (pr == 0) System.out.println("-> Хищники вымерли.");
             System.out.printf("Финальный баланс: Растения: %d | Травоядные: %d | Хищники: %d%n", p, h, pr);

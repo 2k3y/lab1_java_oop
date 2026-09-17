@@ -1,9 +1,9 @@
 package simulation;
 
 public class Plant extends Agent {
-    private static final int ENERGY_GAIN = 4;          // Растение растет очень быстро (+4 энергии за такт)
-    private static final int REPRODUCE_THRESHOLD = 6;  // Низкий порог: делится почти сразу
-    private static final int CHILD_ENERGY = 2;         // Минимальные затраты на потомка
+    private static final int ENERGY_GAIN = 2;
+    private static final int REPRODUCE_THRESHOLD = 6;
+    private static final int CHILD_ENERGY = 2;
     private static final int MAX_ENERGY = 10;
 
     public Plant(int x, int y) {
@@ -24,16 +24,15 @@ public class Plant extends Agent {
         energy += ENERGY_GAIN;
 
         if (energy >= REPRODUCE_THRESHOLD) {
-            if (countNeighborPlants(env) < 5) { // Разрешаем чуть большую плотность для густых зарослей
-                int[] freeCell = env.findEmptyNeighbor(x, y); // Растет строго рядом с родителем
+            // Не дает зарастать полю сплошной непроходимой стеной
+            if (countNeighborPlants(env) < 4) {
+                int[] freeCell = env.findEmptyNeighbor(x, y);
                 if (freeCell != null) {
                     this.energy -= CHILD_ENERGY;
                     env.addAgent(new Plant(freeCell[0], freeCell[1], CHILD_ENERGY));
-                } else {
-                    energy = REPRODUCE_THRESHOLD - 2;
                 }
             } else {
-                energy = REPRODUCE_THRESHOLD - 3;
+                energy = REPRODUCE_THRESHOLD - 2;
             }
         }
 
@@ -53,9 +52,7 @@ public class Plant extends Agent {
             for (int nx = minX; nx <= maxX; nx++) {
                 if (nx == x && ny == y) continue;
                 Agent a = env.getAgent(nx, ny);
-                if (a instanceof Plant && a.isAlive()) {
-                    count++;
-                }
+                if (a instanceof Plant && a.isAlive()) count++;
             }
         }
         return count;

@@ -5,16 +5,16 @@ import java.util.List;
 
 public class Predator extends Agent {
     private static final int STEP_COST = 1;
-    private static final int MEAT_GAIN = 26;
-    private static final int REPRODUCE_THRESHOLD = 78; // порог разможения
-    private static final int CHILD_ENERGY = 35;
-    private static final int MAX_ENERGY = 90;
-    private static final double CATCH_PROBABILITY = 0.30; // шанс успешного захвата
+    private static final int MEAT_GAIN = 25;
+    private static final int REPRODUCE_THRESHOLD = 58;
+    private static final int CHILD_ENERGY = 30;
+    private static final int MAX_ENERGY = 75;
+    private static final double CATCH_PROBABILITY = 0.70;
 
     private int digestionCooldown = 0;
 
     public Predator(int x, int y) {
-        this(x, y, 35);
+        this(x, y, 28);
     }
 
     public Predator(int x, int y, int energy) {
@@ -38,10 +38,7 @@ public class Predator extends Agent {
             digestionCooldown--;
         }
 
-        Agent prey = null;
-        if (digestionCooldown == 0) {
-            prey = scanVision(env, Herbivore.class);
-        }
+        Agent prey = (digestionCooldown == 0) ? scanVision(env, Herbivore.class) : null;
 
         if (prey != null) {
             hunt(env, prey);
@@ -53,9 +50,9 @@ public class Predator extends Agent {
             energy = MAX_ENERGY;
         }
 
-        // Деление: только в одиночестве (нет волков в радиусе 3 клеток)
-        if (energy >= REPRODUCE_THRESHOLD && countNearby(env, Predator.class, 3) == 0) {
-            int[] freeCell = env.findSpawnCellForAnimal(x, y);
+
+        if (energy >= REPRODUCE_THRESHOLD) {
+            int[] freeCell = env.findEmptyNeighbor(x, y);
             if (freeCell != null) {
                 this.energy -= CHILD_ENERGY;
                 env.addAgent(new Predator(freeCell[0], freeCell[1], CHILD_ENERGY));
@@ -64,24 +61,34 @@ public class Predator extends Agent {
     }
 
     private void hunt(Environment env, Agent prey) {
-        int dx = Integer.compare(prey.getX(), x);
-        int dy = Integer.compare(prey.getY(), y);
-        int nx = x + dx;
-        int ny = y + dy;
+        int dx = prey.getX() - x;
+        int dy = prey.getY() - y;
 
-        Agent target = env.getAgent(nx, ny);
-        if (target instanceof Herbivore) {
-            if (random.nextDouble() < CATCH_PROBABILITY) { // Обязательно!
+        if (Math.abs(dx) + Math.abs(dy) == 1) {
+            if (random.nextDouble() < CATCH_PROBABILITY) {
                 this.energy = Math.min(MAX_ENERGY, this.energy + MEAT_GAIN);
                 this.digestionCooldown = 1;
-                env.removeAgent(target);
-                moveTo(env, nx, ny);
+                env.removeAgent(prey);
+                moveTo(env, prey.getX(), prey.getY());
             }
-        } else if (env.isCellEmpty(nx, ny)) {
-            moveTo(env, nx, ny);
-        } else if (target instanceof Plant) {
-            env.removeAgent(target);
-            moveTo(env, nx, ny);
+            return;
+        }
+
+        int stepX = Integer.compare(prey.getX(), x);
+        int stepY = Integer.compare(prey.getY(), y);
+
+        List<int[]> options = new ArrayList<>();
+        if (stepX != 0) options.add(new int[]{x + stepX, y});
+        if (stepY != 0) options.add(new int[]{x, y + stepY});
+
+        List<int[]> emptyOptions = new ArrayList<>();
+        for (int[] opt : options) {
+            if (env.isCellEmpty(opt[0], opt[1])) emptyOptions.add(opt);
+        }
+
+        if (!emptyOptions.isEmpty()) {
+            int[] chosen = emptyOptions.get(random.nextInt(emptyOptions.size()));
+            moveTo(env, chosen[0], chosen[1]);
         } else {
             moveRandomly(env);
         }
@@ -89,38 +96,13 @@ public class Predator extends Agent {
 
     private void moveRandomly(Environment env) {
         List<int[]> validMoves = new ArrayList<>();
-        for (int[] pos : env.getNeighbors(x, y, 1)) {
-            Agent a = env.getAgent(pos[0], pos[1]);
-            if (a == null || a instanceof Plant) {
-                validMoves.add(pos);
-            }
+        for (int[] pos : env.getOrthogonalNeighbors(x, y)) {
+            if (env.isCellEmpty(pos[0], pos[1])) validMoves.add(pos);
         }
+
         if (!validMoves.isEmpty()) {
             int[] move = validMoves.get(random.nextInt(validMoves.size()));
-            Agent target = env.getAgent(move[0], move[1]);
-            if (target instanceof Plant) {
-                env.removeAgent(target);
-            }
             moveTo(env, move[0], move[1]);
         }
-    }
-
-    private int countNearby(Environment env, Class<? extends Agent> type, int radius) {
-        int count = 0;
-        int minX = Math.max(0, x - radius);
-        int maxX = Math.min(env.getWidth() - 1, x + radius);
-        int minY = Math.max(0, y - radius);
-        int maxY = Math.min(env.getHeight() - 1, y + radius);
-
-        for (int ny = minY; ny <= maxY; ny++) {
-            for (int nx = minX; nx <= maxX; nx++) {
-                if (nx == x && ny == y) continue;
-                Agent a = env.getAgent(nx, ny);
-                if (a != null && type.isInstance(a) && a.isAlive()) {
-                    count++;
-                }
-            }
-        }
-        return count;
     }
 }

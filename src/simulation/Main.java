@@ -16,7 +16,7 @@ public class Main {
         String choice = scanner.nextLine().trim();
 
         Environment env = new Environment(60, 60);
-        env.populate(700, 90, 8);
+        env.populate(600, 60, 14);
 
         switch (choice) {
             case "1":
