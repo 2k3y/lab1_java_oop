@@ -9,7 +9,7 @@ public class Predator extends Agent {
     private static final int REPRODUCE_THRESHOLD = 58;
     private static final int CHILD_ENERGY = 30;
     private static final int MAX_ENERGY = 75;
-    private static final double CATCH_PROBABILITY = 0.70;
+    private static final double CATCH_PROBABILITY = 1;
 
     private int digestionCooldown = 0;
 
