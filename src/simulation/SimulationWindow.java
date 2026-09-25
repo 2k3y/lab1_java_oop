@@ -12,15 +12,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SimulationWindow extends JFrame {
-    // Параметры мира по умолчанию
+    // Начальные параметры поля и популяций
     private int fieldWidth = 60;
     private int fieldHeight = 60;
     private int initPlants = 600;
     private int initHerbivores = 60;
     private int initPredators = 14;
 
-    private int cellSize = 12;
-    private int stepBatchSize = 1;
+    // Размер клетки под эмодзи
+    private int cellSize = 18;
     private int stepCount = 0;
     private boolean isRunning = false;
 
@@ -28,7 +28,7 @@ public class SimulationWindow extends JFrame {
     private Environment env;
     private Timer timer;
 
-    // История: Прошлое (Undo) и Будущее (Redo)
+    // История состояний (буфер 3 000 шагов в битовой упаковке)
     private static final int MAX_HISTORY = 3000;
     private final ArrayDeque<WorldSnapshot> history = new ArrayDeque<>();
     private final ArrayDeque<WorldSnapshot> future = new ArrayDeque<>();
@@ -46,26 +46,25 @@ public class SimulationWindow extends JFrame {
     private final JLabel statusLabel;
     private final JLabel inspectorLabel;
 
-    // Настройки
+    // Спиннеры настроек
     private JSpinner widthSpinner;
     private JSpinner heightSpinner;
     private JSpinner plantsSpinner;
     private JSpinner herbsSpinner;
     private JSpinner predsSpinner;
-    private JSpinner batchSpinner;
 
     public SimulationWindow() {
         super("Экосистема: Панель управления");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // 1. Инициализация мира
+        // 1. Создаем начальный мир
         resetEnvironment(fieldWidth, fieldHeight, initPlants, initHerbivores, initPredators);
 
-        // 2. Таймер анимации
-        timer = new Timer(80, e -> performSimulationSteps(stepBatchSize));
+        // 2. Инициализируем таймер со стандартной задержкой 80 мс
+        timer = new Timer(80, e -> performSimulationSteps(1));
 
-        // 3. Поле отображения со скроллом
+        // 3. Центральное поле со скроллом
         canvas = new SimulationPanel();
         JScrollPane scrollPane = new JScrollPane(canvas);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -76,7 +75,7 @@ public class SimulationWindow extends JFrame {
         // 4. Панель управления (справа)
         JPanel sidePanel = new JPanel();
         sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
-        sidePanel.setPreferredSize(new Dimension(360, 800));
+        sidePanel.setPreferredSize(new Dimension(360, 760));
         sidePanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         sidePanel.setBackground(new Color(245, 245, 247));
 
@@ -84,12 +83,12 @@ public class SimulationWindow extends JFrame {
         JPanel statsPanel = createSectionPanel("Статистика экосистемы");
         statsPanel.setLayout(new GridLayout(5, 1, 4, 4));
 
-        stepCounterLabel = new JLabel("Шаг: 0");
+        stepCounterLabel = new JLabel("⏱ Шаг: 0");
         stepCounterLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
 
-        plantCountLabel = createBadgeLabel("Растения (P): 0", new Color(39, 174, 96));
-        herbivoreCountLabel = createBadgeLabel("Травоядные (T): 0", new Color(41, 128, 185));
-        predatorCountLabel = createBadgeLabel("Хищники (X): 0", new Color(192, 57, 43));
+        plantCountLabel = createBadgeLabel("🌿 Растения: 0", new Color(39, 174, 96));
+        herbivoreCountLabel = createBadgeLabel("🐰 Травоядные: 0", new Color(41, 128, 185));
+        predatorCountLabel = createBadgeLabel("🐺 Хищники: 0", new Color(192, 57, 43));
 
         statusLabel = new JLabel("Статус: На паузе");
         statusLabel.setForeground(Color.DARK_GRAY);
@@ -104,16 +103,16 @@ public class SimulationWindow extends JFrame {
 
         // --- Блок 2: Управление ходом ---
         JPanel controlPanel = createSectionPanel("Управление ходом");
-        controlPanel.setLayout(new GridLayout(6, 1, 6, 6));
+        controlPanel.setLayout(new GridLayout(4, 1, 6, 6));
 
-        playPauseBtn = new JButton("▶ Запуск (Пробел)");
+        playPauseBtn = new JButton("▶️ Запуск (Пробел)");
         playPauseBtn.setBackground(new Color(46, 204, 113));
         playPauseBtn.addActionListener(e -> toggleSimulation());
 
-        stepBtn = new JButton("⏭ Сделать шаг (Вправо)");
-        stepBtn.addActionListener(e -> performSimulationSteps(stepBatchSize));
+        stepBtn = new JButton("⏭️ Сделать шаг (Вправо)");
+        stepBtn.addActionListener(e -> performSimulationSteps(1));
 
-        stepBackBtn = new JButton("⏮ Шаг назад (Влево)");
+        stepBackBtn = new JButton("⏮️ Шаг назад (Влево)");
         stepBackBtn.setEnabled(false);
         stepBackBtn.addActionListener(e -> stepBack());
 
@@ -121,40 +120,18 @@ public class SimulationWindow extends JFrame {
         jumpToPresentBtn.setEnabled(false);
         jumpToPresentBtn.addActionListener(e -> jumpToPresent());
 
-        JPanel batchPanel = new JPanel(new BorderLayout(5, 0));
-        batchPanel.setOpaque(false);
-        batchPanel.add(new JLabel("Шагов за ход:"), BorderLayout.WEST);
-        batchSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 5000, 1));
-        batchSpinner.addChangeListener(e -> stepBatchSize = (int) batchSpinner.getValue());
-        batchPanel.add(batchSpinner, BorderLayout.CENTER);
-
-        JPanel speedPanel = new JPanel(new BorderLayout(5, 0));
-        speedPanel.setOpaque(false);
-        JLabel speedLabel = new JLabel("Задержка: 80 мс");
-        JSlider speedSlider = new JSlider(10, 400, 80);
-        speedSlider.setInverted(true);
-        speedSlider.addChangeListener(e -> {
-            int delay = speedSlider.getValue();
-            timer.setDelay(delay);
-            speedLabel.setText("Задержка: " + delay + " мс");
-        });
-        speedPanel.add(speedLabel, BorderLayout.NORTH);
-        speedPanel.add(speedSlider, BorderLayout.CENTER);
-
         controlPanel.add(playPauseBtn);
         controlPanel.add(stepBtn);
         controlPanel.add(stepBackBtn);
         controlPanel.add(jumpToPresentBtn);
-        controlPanel.add(batchPanel);
-        controlPanel.add(speedPanel);
         sidePanel.add(controlPanel);
         sidePanel.add(Box.createVerticalStrut(10));
 
-        // --- Блок 3: Масштаб ---
+        // --- Блок 3: Масштаб клеток (Зум) ---
         JPanel viewPanel = createSectionPanel("Масштаб клеток (Зум)");
         viewPanel.setLayout(new BorderLayout(5, 5));
         JLabel zoomLabel = new JLabel("Размер клетки: " + cellSize + " px");
-        JSlider zoomSlider = new JSlider(4, 24, cellSize);
+        JSlider zoomSlider = new JSlider(8, 36, cellSize);
         zoomSlider.addChangeListener(e -> {
             cellSize = zoomSlider.getValue();
             zoomLabel.setText("Размер клетки: " + cellSize + " px");
@@ -210,7 +187,7 @@ public class SimulationWindow extends JFrame {
                         toggleSimulation();
                         return true;
                     } else if (e.getKeyCode() == KeyEvent.VK_RIGHT || e.getKeyCode() == KeyEvent.VK_N) {
-                        if (!isRunning) performSimulationSteps(stepBatchSize);
+                        if (!isRunning) performSimulationSteps(1);
                         return true;
                     } else if (e.getKeyCode() == KeyEvent.VK_LEFT || e.getKeyCode() == KeyEvent.VK_B) {
                         if (!isRunning) stepBack();
@@ -223,7 +200,7 @@ public class SimulationWindow extends JFrame {
 
         updateStatisticsView();
         pack();
-        setSize(1120, 840);
+        setSize(1180, 820);
         setLocationRelativeTo(null);
     }
 
@@ -255,29 +232,26 @@ public class SimulationWindow extends JFrame {
         isRunning = !isRunning;
         if (isRunning) {
             timer.start();
-            playPauseBtn.setText("⏸ Пауза (Пробел)");
+            playPauseBtn.setText("⏸️ Пауза (Пробел)");
             stepBtn.setEnabled(false);
             stepBackBtn.setEnabled(false);
             jumpToPresentBtn.setEnabled(false);
         } else {
             timer.stop();
-            playPauseBtn.setText("▶ Запуск (Пробел)");
+            playPauseBtn.setText("▶️ Запуск (Пробел)");
             stepBtn.setEnabled(true);
             updateHistoryButtonsState();
         }
         updateStatusLabel();
     }
 
-    // Выполнение шагов: воспроизводит записанное будущее, а по его окончании считает новые ходы со случайностью
     private void performSimulationSteps(int count) {
         for (int i = 0; i < count; i++) {
             if (!future.isEmpty()) {
-                // Воспроизведение записи (точное прошлое)
                 pushToHistory(createCurrentSnapshot());
                 WorldSnapshot next = future.pop();
                 applySnapshot(next);
             } else {
-                // Мы в настоящем: рассчитываем новый шаг с обычным рандомом
                 pushToHistory(createCurrentSnapshot());
                 env.update();
                 stepCount++;
@@ -298,11 +272,9 @@ public class SimulationWindow extends JFrame {
         canvas.repaint();
     }
 
-    // Отмотка на 1 шаг назад
     private void stepBack() {
         if (history.isEmpty()) return;
 
-        // Сохраняем текущий кадр в будущее перед отмотом
         future.push(createCurrentSnapshot());
         WorldSnapshot prev = history.pop();
         applySnapshot(prev);
@@ -313,7 +285,6 @@ public class SimulationWindow extends JFrame {
         canvas.repaint();
     }
 
-    // Мгновенный возврат в самое свежее сохраненное состояние (настоящее)
     private void jumpToPresent() {
         if (future.isEmpty()) return;
 
@@ -334,12 +305,12 @@ public class SimulationWindow extends JFrame {
 
         if (!future.isEmpty()) {
             int maxStep = stepCount + future.size();
-            statusLabel.setText("Статус: Просмотр истории (" + stepCount + " из " + maxStep + ")");
-            statusLabel.setForeground(new Color(142, 68, 173)); // Фиолетовый
+            statusLabel.setText("История: " + stepCount + " / " + maxStep);
+            statusLabel.setForeground(new Color(142, 68, 173));
         } else {
             if (isRunning) {
                 statusLabel.setText("Статус: Запущено");
-                statusLabel.setForeground(new Color(39, 174, 96)); // Зеленый
+                statusLabel.setForeground(new Color(39, 174, 96));
             } else {
                 statusLabel.setText("Статус: На паузе");
                 statusLabel.setForeground(Color.DARK_GRAY);
@@ -362,9 +333,9 @@ public class SimulationWindow extends JFrame {
         }
         if (stepBtn != null) {
             if (!future.isEmpty()) {
-                stepBtn.setText("⏭ Вперёд (по записи)");
+                stepBtn.setText("⏭️ Вперёд (по записи)");
             } else {
-                stepBtn.setText("⏭ Сделать шаг (Вправо)");
+                stepBtn.setText("⏭️ Сделать шаг (Вправо)");
             }
         }
     }
@@ -506,12 +477,13 @@ public class SimulationWindow extends JFrame {
             }
         }
 
-        stepCounterLabel.setText("Шаг: " + stepCount);
-        plantCountLabel.setText("Растения (P): " + plants);
-        herbivoreCountLabel.setText("Травоядные (T): " + herbs);
-        predatorCountLabel.setText("Хищники (X): " + preds);
+        stepCounterLabel.setText("⏱ Шаг: " + stepCount);
+        plantCountLabel.setText("🌿 Растения: " + plants);
+        herbivoreCountLabel.setText("🐰 Травоядные: " + herbs);
+        predatorCountLabel.setText("🐺 Хищники: " + preds);
     }
 
+    // Панель отрисовки: цветные плитки + центрированные эмодзи
     private class SimulationPanel extends JPanel {
         public SimulationPanel() {
             setBackground(new Color(24, 24, 28));
@@ -528,8 +500,8 @@ public class SimulationWindow extends JFrame {
                         if (a == null) {
                             inspectorLabel.setText(String.format("[%d, %d]: Пустая клетка", cellX, cellY));
                         } else {
-                            String type = (a instanceof Plant) ? "Растение" :
-                                    (a instanceof Herbivore) ? "Травоядное" : "Хищник";
+                            String type = (a instanceof Plant) ? "🌿 Растение" :
+                                    (a instanceof Herbivore) ? "🐰 Травоядное" : "🐺 Хищник";
                             inspectorLabel.setText(String.format("[%d, %d] %s (Энергия: %d)",
                                     cellX, cellY, type, a.getEnergy()));
                         }
@@ -546,27 +518,46 @@ public class SimulationWindow extends JFrame {
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2d = (Graphics2D) g;
+
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            int fontSize = Math.max(9, (int) (cellSize * 0.72));
+            Font emojiFont = new Font("Apple Color Emoji", Font.PLAIN, fontSize);
+            g2d.setFont(emojiFont);
+            FontMetrics fm = g2d.getFontMetrics();
 
             for (int y = 0; y < env.getHeight(); y++) {
                 for (int x = 0; x < env.getWidth(); x++) {
                     Agent agent = env.getAgent(x, y);
                     if (agent != null && agent.isAlive()) {
+                        String emoji;
+                        Color tileColor;
+
                         if (agent instanceof Plant) {
-                            g2d.setColor(new Color(46, 204, 113));
+                            tileColor = new Color(39, 174, 96, 170);
+                            emoji = "🌿";
                         } else if (agent instanceof Herbivore) {
-                            g2d.setColor(new Color(52, 152, 219));
-                        } else if (agent instanceof Predator) {
-                            g2d.setColor(new Color(231, 76, 60));
+                            tileColor = new Color(41, 128, 185, 210);
+                            emoji = "🐰";
+                        } else {
+                            tileColor = new Color(231, 76, 60, 230);
+                            emoji = "🐺";
                         }
 
-                        g2d.fillRoundRect(
-                                x * cellSize + 1,
-                                y * cellSize + 1,
-                                Math.max(2, cellSize - 2),
-                                Math.max(2, cellSize - 2),
-                                4, 4
-                        );
+                        int px = x * cellSize;
+                        int py = y * cellSize;
+                        int size = Math.max(2, cellSize - 2);
+
+                        g2d.setColor(tileColor);
+                        g2d.fillRoundRect(px + 1, py + 1, size, size, Math.max(2, size / 3), Math.max(2, size / 3));
+
+                        if (cellSize >= 11) {
+                            int textW = fm.stringWidth(emoji);
+                            int textX = px + (cellSize - textW) / 2;
+                            int textY = py + (cellSize + fm.getAscent() - fm.getDescent()) / 2;
+                            g2d.drawString(emoji, textX, textY);
+                        }
                     }
                 }
             }
